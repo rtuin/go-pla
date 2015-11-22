@@ -58,7 +58,6 @@ commandLoop:
 		}
 
 		fmt.Printf("    ⌛ %v", rawCommandString)
-		fmt.Println("cmd:", commandString)
 
 		cmd := exec.Command("sh", "-c", commandString)
 		var stdErr bytes.Buffer
@@ -67,6 +66,10 @@ commandLoop:
 		if err != nil {
 			fmt.Printf("\033[2K\r\x1b[31;1m    ✘ %v\x1b[0m\n", rawCommandString)
 			strErrLines := strings.Split(stdErr.String(), "\n")
+			if len(stdErr.String()) == 0 {
+				strErrLines = []string{"[no output]"}
+			}
+
 			for lineIndex := range strErrLines {
 				fmt.Printf("\x1b[31;2m        %s\x1b[0m\n", strErrLines[lineIndex])
 			}
