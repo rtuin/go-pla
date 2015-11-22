@@ -1,0 +1,6 @@
+build:
+  - =deps
+  - go install ./cmd/pla
+
+deps:
+  - go get ./...
