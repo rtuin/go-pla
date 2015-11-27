@@ -1,10 +1,8 @@
 package pla
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"os/exec"
 	"strings"
 )
 
@@ -30,62 +28,14 @@ func RunTargetByName(targetName string, targets []Target, stopRunning bool, para
 
 	fmt.Printf("Running target \"%v\":\n", targetName)
 
-	runTargetCommands(target, stopRunning, params)
+	target.Run(params, stopRunning)
 	return nil
-}
-
-func runTargetCommands(target Target, stopRunning bool, params []string) bool {
-commandLoop:
-	for commandIndex := range target.Commands {
-		switch commandType := target.Commands[commandIndex].(type) {
-		case Target:
-			stopRunning = runTargetCommands(commandType, stopRunning, params)
-			continue commandLoop
-		}
-
-		rawCommandString := target.Commands[commandIndex].(string)
-		if stopRunning {
-			fmt.Printf("\x1b[37;2m    . %v\x1b[0m\n", target.Commands[commandIndex])
-			continue
-		}
-
-		commandString := rawCommandString
-		if len(params) > 0 {
-			for index := range params {
-				commandString = strings.Replace(commandString, fmt.Sprintf("%%%v%%", target.Parameters[index]), params[index], -1)
-			}
-			// rawCommandString = commandString
-		}
-
-		fmt.Printf("    ⌛ %v", rawCommandString)
-
-		cmd := exec.Command("sh", "-c", commandString)
-		var stdErr bytes.Buffer
-		cmd.Stderr = &stdErr
-		err := cmd.Run()
-		if err != nil {
-			fmt.Printf("\033[2K\r\x1b[31;1m    ✘ %v\x1b[0m\n", rawCommandString)
-			strErrLines := strings.Split(stdErr.String(), "\n")
-			if len(stdErr.String()) == 0 {
-				strErrLines = []string{"[no output]"}
-			}
-
-			for lineIndex := range strErrLines {
-				fmt.Printf("\x1b[31;2m        %s\x1b[0m\n", strErrLines[lineIndex])
-			}
-			stopRunning = true
-			continue
-		}
-		fmt.Printf("\033[2K\r\x1b[32m    ✔ %v\x1b[0m\n", rawCommandString)
-	}
-	return stopRunning
 }
 
 func FindTargetByTargetName(targetName string, targets []Target) (Target, error) {
 	for targetIndex := range targets {
 		if targets[targetIndex].Name == targetName {
 			return targets[targetIndex], nil
-			break
 		}
 	}
 	return Target{}, errors.New("failed to find target")

@@ -1,99 +1,65 @@
 package pla
 
 import (
-	"errors"
+	"bytes"
 	"fmt"
-	"github.com/smallfish/simpleyaml"
-	"io/ioutil"
+	"os/exec"
 	"strings"
 )
 
+type Runnable interface {
+	Run(params []string, stopRunning bool) bool
+}
+
 type Target struct {
 	Name       string
-	Commands   []interface{}
+	Commands   []Runnable
 	Parameters []string
 }
 
-func LoadTargets(filename string) ([]Target, error) {
-	data, error := ioutil.ReadFile(filename)
-	if error != nil {
-		panic(error)
+type Command struct {
+	Command string
+}
+
+func (t Target) Run(params []string, stopRunning bool) bool {
+	for i := range t.Commands {
+		stopRunning = t.Commands[i].Run(params, stopRunning)
+	}
+	return stopRunning
+}
+
+func (c Command) Run(params []string, stopRunning bool) bool {
+	if stopRunning {
+		fmt.Printf("\x1b[37;2m    . %v\x1b[0m\n", c.Command)
+		return true
 	}
 
-	yaml, error := simpleyaml.NewYaml(data)
-	if error != nil {
-		panic(error)
-	}
+	commandString := c.Command
+	// if len(params) > 0 {
+	// 	for index := range params {
+	// 		commandString = strings.Replace(commandString, fmt.Sprintf("%%%v%%", target.Parameters[index]), params[index], -1)
+	// 	}
+	// }
 
-	m, err := yaml.Map()
+	fmt.Printf("    ⌛ %v", c.Command)
+
+	cmd := exec.Command("sh", "-c", commandString)
+	var stdErr bytes.Buffer
+	cmd.Stderr = &stdErr
+	err := cmd.Run()
 	if err != nil {
-		panic(err)
-	}
-
-	var targets []Target
-
-	for key, value := range m {
-		value := value.([]interface{})
-		commands := make([]interface{}, len(value))
-		targetName := simplifyTargetName(key.(string))
-		targetParams, targetParamErr := findParametersInTargetName(key.(string))
-		if targetParamErr != nil {
-			panic(targetParamErr)
+		fmt.Printf("\033[2K\r\x1b[31;1m    ✘ %v\x1b[0m\n", c.Command)
+		strErrLines := strings.Split(stdErr.String(), "\n")
+		if len(stdErr.String()) == 0 {
+			strErrLines = []string{"[no output]"}
 		}
 
-		for i := range value {
-			commands[i] = value[i]
+		for lineIndex := range strErrLines {
+			fmt.Printf("\x1b[31;2m        %s\x1b[0m\n", strErrLines[lineIndex])
 		}
-		targets = append(targets, Target{targetName, commands, targetParams})
+		return true
 	}
+	fmt.Printf("\033[2K\r\x1b[32m    ✔ %v\x1b[0m\n", c.Command)
 
-	for targetIndex := range targets {
-		for commandIndex := range targets[targetIndex].Commands {
-			currentCommand := targets[targetIndex].Commands[commandIndex].(string)
-			if currentCommand[0] != "="[0] {
-				continue
-			}
-
-			subTargetName := currentCommand[1:]
-			subTarget, err := FindTargetByTargetName(subTargetName, targets)
-			if err != nil {
-				fmt.Printf("Error: Using non-existent target \"%v\" as subtarget.\n", subTargetName)
-				fmt.Println("Valid targets are:")
-				for tIndex := range targets {
-					fmt.Println("  -", targets[tIndex].Name)
-				}
-				return nil, err
-			}
-
-			targets[targetIndex].Commands[commandIndex] = subTarget
-		}
-	}
-
-	return targets, nil
-}
-
-func findParametersInTargetName(rawName string) ([]string, error) {
-	paramStartIndex := strings.Index(rawName, "[")
-	paramEndIndex := strings.Index(rawName, "]")
-	if paramStartIndex == -1 {
-		return make([]string, 0), nil
-	}
-
-	if paramEndIndex == -1 {
-		return nil, errors.New(fmt.Sprintf("Incorrect syntax for target %v", rawName))
-	}
-
-	return strings.Split(rawName[paramStartIndex+1:paramEndIndex], ","), nil
-}
-
-func simplifyTargetName(rawName string) string {
-	if rawName[0] == "="[0] {
-		rawName = rawName[1:]
-	}
-
-	paramStartIndex := strings.Index(rawName, "[")
-	if paramStartIndex == -1 {
-		return rawName
-	}
-	return rawName[:paramStartIndex]
+	return false
 }
