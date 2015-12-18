@@ -8,6 +8,12 @@ import (
 	"strings"
 )
 
+type targetDependency struct {
+	target     int
+	position   int
+	targetName string
+}
+
 func LoadTargets(filename string) ([]Target, error) {
 	data, error := ioutil.ReadFile(filename)
 	if error != nil {
@@ -24,7 +30,9 @@ func LoadTargets(filename string) ([]Target, error) {
 		panic(err)
 	}
 
-	var targets []Target
+	targets := make([]Target, len(m))
+	targetIndex := 0
+	depTargets := make([]targetDependency, 0)
 
 	for key, value := range m {
 		value := value.([]interface{})
@@ -34,16 +42,28 @@ func LoadTargets(filename string) ([]Target, error) {
 		if targetParamErr != nil {
 			panic(targetParamErr)
 		}
+		target := Target{Name: targetName, Parameters: targetParams}
 
 		for i := range value {
 			commandString := value[i].(string)
 			if commandString[0] == "="[0] {
-				panic("Subtargets not implemented yet!")
+				depTargets = append(depTargets, targetDependency{targetIndex, i, simplifyTargetName(commandString)})
 			}
 			commands[i] = Command{commandString}
-			// commands[i] = Command{value[i].(string)}
 		}
-		targets = append(targets, Target{targetName, commands, targetParams})
+
+		target.Commands = commands
+		targets[targetIndex] = target
+
+		targetIndex = targetIndex + 1
+	}
+
+	for dti := range depTargets {
+		for ti := range targets {
+			if depTargets[dti].targetName == targets[ti].Name {
+				targets[depTargets[dti].target].Commands[depTargets[dti].position] = targets[ti]
+			}
+		}
 	}
 
 	// for targetIndex := range targets {
